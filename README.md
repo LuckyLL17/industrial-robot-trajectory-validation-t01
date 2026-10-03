@@ -18,3 +18,14 @@ npm run dev
 - 约束校验与风险门禁
 - 方案版本、审计轨迹与异常处置
 - 所有状态暂存于进程内，便于本机演示；可扩展为数据库、事件总线和实时流处理架构
+
+## 增强业务闭环
+
+- TCP 工具标定误差和标定有效期管理
+- 工件基准坐标系登记
+- 动态障碍物上报与清除
+- 轨迹发布前的碰撞、标定、动态障碍物多重安全门禁
+- 执行中关节跟踪误差和 TCP 力阈值保护停机
+- 轨迹 release、执行遥测和安全审计
+
+扩展接口：`/api/calibrations`、`/api/frames`、`/api/dynamic-obstacles`、`/api/paths/:id/release`、`/api/executions/:id/telemetry`。
