@@ -29,3 +29,17 @@ npm run dev
 - 轨迹 release、执行遥测和安全审计
 
 扩展接口：`/api/calibrations`、`/api/frames`、`/api/dynamic-obstacles`、`/api/paths/:id/release`、`/api/executions/:id/telemetry`。
+
+## 坐标系验证与轨迹转换
+
+产线换型时，把车身基准坐标系下的轨迹转换到焊装单元坐标系：
+
+- `POST /api/frames/:id/verifications`：提交至少 3 对不共线的 `nominalPoints`（车身系名义点）与 `measuredPoints`（单元系实测点），服务端用 Kabsch（3x3 SVD）求解刚体平移 `translation`、旋转（`rotationEuler` ZYX 内旋 + `rotationMatrix`）和逐点残差（`residualMaxMm` / `residualRmsMm`），按 `toleranceMm`（默认 2mm）判定 `passed`，并生成自增验证版本。
+  - 点数不足返回 `400 points-insufficient`，点集共线返回 `400 points-degenerate`；验证失败也会落版本（`passed:false`），frame 状态置为 `failed`，重新验证通过后恢复 `verified`。
+  - 相同点集与容差重复提交幂等返回原版本（`idempotent:true`），不会产生重复或难解释的状态。
+- `GET /api/frames/:id/verifications`、`GET /api/frames/:id/verifications/:vid`：版本列表与详情（失败版本同样可查）。
+- `POST /api/paths/:id/frame`：把路径关联到**已验证**的 frame（可显式指定 `verificationId` 钉住版本，否则取最新通过版本）；重复关联同一版本幂等，关联历史保留在 `frameRefHistory`。
+- `POST /api/paths/:id/transform-preview`：基于关联 frame（或 body 临时指定 `frameId` / `verificationId`，`useLatest:true` 取最新通过版本）输出 `transformedWaypoints` 预览，位置与姿态（ZYX 角随旋转复合）一并转换，**不修改路径原始 waypoints**（响应中 `originalWaypointsUnchanged:true`，并回显 `source`）。
+- `GET /api/paths/:id/frame`：读取关联状态；未关联返回 `frameRef:null`（路径仍可读），关联的 frame 不存在时返回 `frameExists:false`，存在更新的已验证版本时给出 `updateAvailable`。
+
+规则：frame 不存在 404；frame 从未验证或所指验证失败时关联/预览返回 409 并附验证摘要；frame 最新一次验证失败期间，钉住旧通过版本的路径仍可读取和预览。所有状态仍为进程内暂存。
