@@ -29,3 +29,16 @@ npm run dev
 - 轨迹 release、执行遥测和安全审计
 
 扩展接口：`/api/calibrations`、`/api/frames`、`/api/dynamic-obstacles`、`/api/paths/:id/release`、`/api/executions/:id/telemetry`。
+
+## 坐标系验证与轨迹转换
+
+产线换型时把轨迹从车身基准坐标系转换到焊装单元：
+
+- `POST /api/frames/:id/verifications`：提交名义点 `nominal` 与实测点 `measured`（至少 3 对，一一对应），用 Kabsch 算法求最优刚体变换（平移 + Rz·Ry·Rx 欧拉角），返回 RMS/最大/逐点残差，按 `toleranceMm`（默认 2mm）判定通过与否并记录递增验证版本；相同输入重复提交幂等返回，共线等退化几何只记录失败版本，不生成无法解释的变换
+- `GET /api/frames/:id/verifications`：验证版本历史（含失败版本）；frame 重新验证后 `currentVerificationId` 只指向最新通过版本，失败不影响已通过的旧版本
+- `POST /api/paths/:id/frame-association`：路径只能关联**已验证通过**的 frame，关联锚定具体验证版本（快照），重复提交幂等
+- `GET /api/paths/:id/frame-association`：读取关联；frame 重新验证后关联仍锚定旧快照并标记 `stale`，不隐式改变转换结果
+- `POST /api/paths/:id/transform-preview`：只读转换预览，返回转换后的 waypoint 副本（位置 + 姿态 + 工艺参数），**不修改原始 waypoints**；默认用关联快照，也可显式传 `frameId` / `verificationVersion` 指定
+- `GET /api/paths` / `GET /api/paths/:id`：路径只读接口
+- 错误码：`INSUFFICIENT_POINTS`(422)、`POINT_COUNT_MISMATCH` / `MALFORMED_INPUT`(400)、`FRAME_NOT_FOUND` / `PATH_NOT_FOUND`(404)、`FRAME_NOT_VERIFIED` / `NO_FRAME_ASSOCIATED` / `VERIFICATION_VERSION_NOT_PASSED`(409)
+- 未关联 frame 的旧路径，其原有 validate/plan/execute/release 闭环行为完全不变；上线前预置的 `frame-body` 保留合成 v1（单位变换，带 `SYNTHETIC_SEED` 警告），建议重新提交实测点验证
